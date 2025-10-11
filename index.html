@@ -4,7 +4,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>4-Digit Code Generator</title>
-    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Custom styles for spinner and toast */
@@ -51,17 +50,16 @@
         <div class="bg-gray-800 p-8 rounded-xl shadow-2xl space-y-8">
             <header class="text-center">
                 <h1 class="text-4xl font-extrabold text-blue-400">4-Digit Code Generator</h1>
-                <p class="text-gray-400 mt-2">Unique codes guaranteed for this session (No cloud storage).</p>
+                <p class="text-gray-400 mt-2">Unique codes guaranteed (Now with Cloud Storage!)</p>
             </header>
 
-            <!-- Generator Card -->
             <section class="generator-card bg-gray-700 p-6 rounded-xl space-y-6 text-center">
                 <div id="bigCode" class="big-code big-code-text text-7xl md:text-8xl font-black text-white p-4 bg-gray-900 rounded-lg shadow-inner">
-                    —
+                    Loading...
                 </div>
 
                 <div class="controls flex flex-col sm:flex-row justify-center space-y-3 sm:space-y-0 sm:space-x-3">
-                    <button id="generateBtn" class="btn primary flex-grow sm:flex-none py-3 px-6 rounded-lg text-lg font-semibold bg-indigo-600 hover:bg-indigo-500 transition duration-150 shadow-md hover:shadow-lg disabled:bg-gray-500">
+                    <button id="generateBtn" class="btn primary flex-grow sm:flex-none py-3 px-6 rounded-lg text-lg font-semibold bg-indigo-600 hover:bg-indigo-500 transition duration-150 shadow-md hover:shadow-lg disabled:bg-gray-500" disabled>
                         <span id="generateIcon" class="icon">✨</span>
                         Generate New Code
                     </button>
@@ -76,14 +74,13 @@
                 </div>
 
                 <div class="status text-sm text-gray-400 space-x-2">
-                    <span id="countText">No codes generated yet.</span>
+                    <span id="countText">Connecting to database...</span>
                     <span id="maxMessage" class="max-message text-yellow-400 font-bold" hidden>
                         ⚠️ All possible codes generated!
                     </span>
                 </div>
             </section>
 
-            <!-- Table Section -->
             <section class="table-section bg-gray-700 p-6 rounded-xl">
                 <h2 class="text-xl font-bold text-gray-200 mb-4">Generated Codes List (Latest First)</h2>
                 <div class="table-wrap max-h-64 overflow-y-auto rounded-lg">
@@ -92,8 +89,7 @@
                             <tr><th class="py-3 px-4 text-left text-xs font-medium uppercase tracking-wider text-gray-200">CODE</th></tr>
                         </thead>
                         <tbody id="codesBody" class="bg-gray-700 divide-y divide-gray-600">
-                            <!-- Codes will be injected here -->
-                        </tbody>
+                            </tbody>
                     </table>
                 </div>
             </section>
@@ -102,7 +98,29 @@
 
     <div id="toastContainer" class="toast-container"></div>
 
-    <script>
+    <script type="module">
+        // ====================================================================
+        // FIREBASE INITIALIZATION
+        // ====================================================================
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCEs7B0vZS1riiJBRqpM84ljXVDePJsgMw",
+            authDomain: "code-gen-vk.firebaseapp.com",
+            projectId: "code-gen-vk",
+            storageBucket: "code-gen-vk.firebasestorage.app",
+            messagingSenderId: "75440750107",
+            appId: "1:75440750107:web:d561f76027aeb3f1d242be",
+            measurementId: "G-58YMCLPJ7Q"
+        };
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const CODE_DOC_REF = doc(db, "uniqueCodes", "generatedCodes"); // Collection: uniqueCodes, Document: generatedCodes
+
         // ====================================================================
         // CLIENT-SIDE LOGIC FOR UNIQUE CODE GENERATION
         // ====================================================================
@@ -125,16 +143,81 @@
         const usedCodes = new Set(); // Stores all generated codes for uniqueness check
         let latestCode = "—";
         let isMaxReached = false;
+        let isInitialLoad = true;
+
 
         /**
          * ====================================================================
-         * UX Utilities
+         * FIREBASE DATA MANAGEMENT
          * ====================================================================
          */
 
+        async function loadCodesFromFirestore() {
+            try {
+                showToast("Connecting to database...", 'info');
+                const docSnap = await getDoc(CODE_DOC_REF);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    const codesArray = data.codes || [];
+                    
+                    codesArray.forEach(code => {
+                        usedCodes.add(code);
+                    });
+
+                    // Render codes from database
+                    // Since it's a Set, convert to array, reverse for "Latest First", and render
+                    Array.from(usedCodes).reverse().forEach(code => renderNewCode(code));
+                    
+                    if (usedCodes.size > 0) {
+                        latestCode = Array.from(usedCodes).pop(); // Last added to the Set
+                        bigCode.textContent = latestCode;
+                    } else {
+                        bigCode.textContent = "—";
+                    }
+
+                    showToast(`Loaded ${usedCodes.size} codes from Firestore!`, 'success');
+
+                } else {
+                    // Document doesn't exist, create it with an empty array
+                    await setDoc(CODE_DOC_REF, { codes: [] });
+                    bigCode.textContent = "—";
+                    showToast("Database document created.", 'info');
+                }
+            } catch (error) {
+                console.error("Error loading codes from Firestore:", error);
+                showToast("Failed to load codes from Firestore. Data will be temporary.", 'error');
+                bigCode.textContent = "Error";
+            }
+            
+            isInitialLoad = false;
+            updateCountText();
+            setLoadingState(false);
+        }
+
+        async function saveNewCodeToFirestore(newCode) {
+            // Firestore data structure: { codes: ["C1", "C2", ...] }
+            try {
+                // Since we are adding one, we update the existing document by adding to the array.
+                // Firestore doesn't have a direct "add to Set" for arrays, so we overwrite the array
+                // to maintain atomicity and simplify the code. This is fine for small arrays.
+                await updateDoc(CODE_DOC_REF, {
+                    codes: Array.from(usedCodes) 
+                });
+                console.log(`Code ${newCode} saved to Firestore.`);
+            } catch (error) {
+                console.error("Error saving code to Firestore:", error);
+                showToast(`Code ${newCode} generated, but FAILED to save to cloud!`, 'error');
+            }
+        }
+
+
         /**
-         * Shows a temporary, non-blocking toast notification.
+         * ====================================================================
+         * UX Utilities (Unchanged, for context)
+         * ====================================================================
          */
+
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
             if (!container) return; 
@@ -154,22 +237,17 @@
 
             setTimeout(() => {
                 toast.classList.remove('show');
-                // Remove element after transition ends to keep DOM clean
                 toast.addEventListener('transitionend', () => toast.remove());
             }, 4000);
         }
 
-        /**
-         * Copies the current code in the big display to the clipboard.
-         */
         function copyToClipboard() {
             const code = latestCode.trim();
-            if (code === '—' || code === 'Generating...' || !code) {
+            if (code === '—' || code === 'Generating...' || !code || isInitialLoad) {
                 showToast("No code to copy.", "info");
                 return;
             }
             
-            // Use the fallback method for copying text
             const tempInput = document.createElement('textarea');
             tempInput.value = code;
             document.body.appendChild(tempInput);
@@ -185,7 +263,7 @@
         }
 
         function setLoadingState(isLoading) {
-            if (isLoading) {
+            if (isLoading || isInitialLoad) {
                 generateBtn.disabled = true;
                 generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
                 bigCode.textContent = 'Generating...';
@@ -204,7 +282,7 @@
             countText.textContent = `Codes generated: ${usedCodes.size} / ${TOTAL_POSSIBLE_CODES.toLocaleString()}`;
             if (usedCodes.size >= TOTAL_POSSIBLE_CODES) {
                 setMaxReachedState();
-            } else {
+            } else if (!isInitialLoad) {
                 isMaxReached = false;
                 generateBtn.disabled = false;
                 maxMessage.hidden = true;
@@ -225,7 +303,6 @@
          * ====================================================================
          */
 
-        // Utility: generate a random N-char code (A-Z, 0-9)
         function randomCode() {
             let out = "";
             for (let i = 0; i < CODE_LENGTH; i++) {
@@ -234,13 +311,9 @@
             return out;
         }
 
-        /**
-         * Generates a unique code by checking against the in-memory Set.
-         * Tries up to 10 times before reporting failure.
-         */
         function generateUniqueCode(retries = 10) {
             if (usedCodes.size >= TOTAL_POSSIBLE_CODES) {
-                return null; // All possible codes exhausted
+                return null;
             }
 
             for (let i = 0; i < retries; i++) {
@@ -249,13 +322,11 @@
                     return candidate;
                 }
             }
-            // If we failed after retries, it's likely high collision rate
-            // But for a 4-digit code, this only happens near the limit.
             return null; 
         }
 
-        // Handle Generate button click
-        function onGenerateClick() {
+        // Handle Generate button click - NOW ASYNC
+        async function onGenerateClick() {
             setLoadingState(true);
 
             if (isMaxReached) {
@@ -271,9 +342,12 @@
                 bigCode.textContent = newCode;
                 renderNewCode(newCode);
                 updateCountText();
-                showToast(`Code '${newCode}' generated!`, 'success');
+                
+                // *** FIREBASE STEP: Save the new code ***
+                await saveNewCodeToFirestore(newCode);
+                
+                showToast(`Code '${newCode}' generated & saved!`, 'success');
             } else {
-                // Should only happen if total limit is reached or massive collision (unlikely)
                 setMaxReachedState();
                 bigCode.textContent = "Error";
                 showToast("Failed to generate a unique code. Limit reached?", "error");
@@ -282,10 +356,6 @@
             setLoadingState(false);
         }
 
-        /**
-         * Prepends the newly generated code to the top of the table.
-         * @param {string} code - The new code string.
-         */
         function renderNewCode(code) {
             const tr = document.createElement("tr");
             tr.className = "bg-gray-800 hover:bg-gray-700 transition duration-100";
@@ -294,7 +364,6 @@
             td.textContent = code;
             tr.appendChild(td);
 
-            // Prepend the new row to the table body (Latest First)
             if (codesBody.firstChild) {
                 codesBody.insertBefore(tr, codesBody.firstChild);
             } else {
@@ -302,8 +371,6 @@
             }
         }
 
-
-        // Export codes as CSV with one column named "codes"
         function exportCSV() {
             if (usedCodes.size === 0) {
                 showToast("No codes to export.", "info");
@@ -311,7 +378,6 @@
             }
             
             const header = "Code\n";
-            // Convert Set to Array and join with newlines
             const rows = Array.from(usedCodes).reverse().join("\n"); 
             const csv = header + rows;
             
@@ -333,8 +399,8 @@
             copyBtn.addEventListener("click", copyToClipboard);
             exportBtn.addEventListener("click", exportCSV);
             
-            // Initial state update
-            updateCountText(); 
+            // Load data and set initial state
+            loadCodesFromFirestore();
             
             console.log(`Client-Side Generator Initialized. Total possible unique codes: ${TOTAL_POSSIBLE_CODES.toLocaleString()}`);
         }
