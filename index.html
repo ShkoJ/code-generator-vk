@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>4-Digit Code Generator</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for spinner and toast */
+        .spinner {
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 2px solid #fff;
+            width: 1em;
+            height: 1em;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .toast {
+            @apply flex items-center p-3 mb-2 rounded-lg shadow-xl text-sm transform transition-all duration-300 ease-out translate-x-full opacity-0;
+        }
+        .toast.show {
+            @apply translate-x-0 opacity-100;
+        }
+        .toast.success { @apply bg-green-600 text-white; }
+        .toast.error { @apply bg-red-600 text-white; }
+        .toast.info { @apply bg-blue-600 text-white; }
+        .big-code-text {
+            /* Custom font styling for the code */
+            font-family: 'Inter', sans-serif;
+            letter-spacing: 0.25em;
+        }
+        
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center p-4">
+    <main class="w-full max-w-2xl">
+        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl space-y-8">
+            <header class="text-center">
+                <h1 class="text-4xl font-extrabold text-blue-400">4-Digit Code Generator</h1>
+                <p class="text-gray-400 mt-2">Unique codes guaranteed for this session (No cloud storage).</p>
+            </header>
+
+            <!-- Generator Card -->
+            <section class="generator-card bg-gray-700 p-6 rounded-xl space-y-6 text-center">
+                <div id="bigCode" class="big-code big-code-text text-7xl md:text-8xl font-black text-white p-4 bg-gray-900 rounded-lg shadow-inner">
+                    —
+                </div>
+
+                <div class="controls flex flex-col sm:flex-row justify-center space-y-3 sm:space-y-0 sm:space-x-3">
+                    <button id="generateBtn" class="btn primary flex-grow sm:flex-none py-3 px-6 rounded-lg text-lg font-semibold bg-indigo-600 hover:bg-indigo-500 transition duration-150 shadow-md hover:shadow-lg disabled:bg-gray-500">
+                        <span id="generateIcon" class="icon">✨</span>
+                        Generate New Code
+                    </button>
+                    <button id="copyBtn" class="btn py-3 px-6 rounded-lg font-medium bg-gray-600 hover:bg-gray-500 transition duration-150 shadow-md">
+                        <span class="icon">📋</span>
+                        Copy
+                    </button>
+                    <button id="exportBtn" class="btn py-3 px-6 rounded-lg font-medium bg-gray-600 hover:bg-gray-500 transition duration-150 shadow-md">
+                        <span class="icon">⬇️</span>
+                        Export CSV
+                    </button>
+                </div>
+
+                <div class="status text-sm text-gray-400 space-x-2">
+                    <span id="countText">No codes generated yet.</span>
+                    <span id="maxMessage" class="max-message text-yellow-400 font-bold" hidden>
+                        ⚠️ All possible codes generated!
+                    </span>
+                </div>
+            </section>
+
+            <!-- Table Section -->
+            <section class="table-section bg-gray-700 p-6 rounded-xl">
+                <h2 class="text-xl font-bold text-gray-200 mb-4">Generated Codes List (Latest First)</h2>
+                <div class="table-wrap max-h-64 overflow-y-auto rounded-lg">
+                    <table id="codesTable" class="min-w-full divide-y divide-gray-600">
+                        <thead class="bg-gray-600 sticky top-0">
+                            <tr><th class="py-3 px-4 text-left text-xs font-medium uppercase tracking-wider text-gray-200">CODE</th></tr>
+                        </thead>
+                        <tbody id="codesBody" class="bg-gray-700 divide-y divide-gray-600">
+                            <!-- Codes will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script>
+        // ====================================================================
+        // CLIENT-SIDE LOGIC FOR UNIQUE CODE GENERATION
+        // ====================================================================
+
+        // UI elements
+        const generateBtn = document.getElementById("generateBtn");
+        const copyBtn = document.getElementById("copyBtn");
+        const exportBtn = document.getElementById("exportBtn");
+        const bigCode = document.getElementById("bigCode");
+        const codesBody = document.getElementById("codesBody");
+        const countText = document.getElementById("countText");
+        const maxMessage = document.getElementById("maxMessage");
+
+        // Constants
+        const CODE_LENGTH = 4;
+        const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        const TOTAL_POSSIBLE_CODES = Math.pow(CHARS.length, CODE_LENGTH); // 36^4 = 1,679,616
+        
+        // State
+        const usedCodes = new Set(); // Stores all generated codes for uniqueness check
+        let latestCode = "—";
+        let isMaxReached = false;
+
+        /**
+         * ====================================================================
+         * UX Utilities
+         * ====================================================================
+         */
+
+        /**
+         * Shows a temporary, non-blocking toast notification.
+         */
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            if (!container) return; 
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            let icon = '';
+            if (type === 'success') icon = '✅';
+            if (type === 'error') icon = '❌';
+            if (type === 'info') icon = '💡';
+
+            toast.innerHTML = `<span class="toast-icon mr-2">${icon}</span><div class="toast-message">${message}</div>`;
+            container.appendChild(toast);
+
+            void toast.offsetWidth;
+            toast.classList.add('show');
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                // Remove element after transition ends to keep DOM clean
+                toast.addEventListener('transitionend', () => toast.remove());
+            }, 4000);
+        }
+
+        /**
+         * Copies the current code in the big display to the clipboard.
+         */
+        function copyToClipboard() {
+            const code = latestCode.trim();
+            if (code === '—' || code === 'Generating...' || !code) {
+                showToast("No code to copy.", "info");
+                return;
+            }
+            
+            // Use the fallback method for copying text
+            const tempInput = document.createElement('textarea');
+            tempInput.value = code;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            try {
+                document.execCommand('copy');
+                showToast(`'${code}' copied to clipboard!`, 'success');
+            } catch (err) {
+                console.error('Copy failed:', err);
+                showToast('Failed to copy. Please try again.', 'error');
+            }
+            document.body.removeChild(tempInput);
+        }
+
+        function setLoadingState(isLoading) {
+            if (isLoading) {
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
+                bigCode.textContent = 'Generating...';
+            } else {
+                generateBtn.disabled = isMaxReached;
+                generateBtn.innerHTML = isMaxReached 
+                    ? `<span class="icon">🛑</span> Max Reached`
+                    : `<span class="icon">✨</span> Generate New Code`;
+                if (bigCode.textContent === 'Generating...') {
+                    bigCode.textContent = latestCode;
+                }
+            }
+        }
+
+        function updateCountText() {
+            countText.textContent = `Codes generated: ${usedCodes.size} / ${TOTAL_POSSIBLE_CODES.toLocaleString()}`;
+            if (usedCodes.size >= TOTAL_POSSIBLE_CODES) {
+                setMaxReachedState();
+            } else {
+                isMaxReached = false;
+                generateBtn.disabled = false;
+                maxMessage.hidden = true;
+            }
+        }
+
+        function setMaxReachedState() {
+            isMaxReached = true;
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = `<span class="icon">🛑</span> Max Reached`;
+            maxMessage.hidden = false;
+            showToast("Maximum number of unique codes reached for 4 digits!", "error");
+        }
+
+        /**
+         * ====================================================================
+         * Generation Logic
+         * ====================================================================
+         */
+
+        // Utility: generate a random N-char code (A-Z, 0-9)
+        function randomCode() {
+            let out = "";
+            for (let i = 0; i < CODE_LENGTH; i++) {
+                out += CHARS.charAt(Math.floor(Math.random() * CHARS.length));
+            }
+            return out;
+        }
+
+        /**
+         * Generates a unique code by checking against the in-memory Set.
+         * Tries up to 10 times before reporting failure.
+         */
+        function generateUniqueCode(retries = 10) {
+            if (usedCodes.size >= TOTAL_POSSIBLE_CODES) {
+                return null; // All possible codes exhausted
+            }
+
+            for (let i = 0; i < retries; i++) {
+                const candidate = randomCode();
+                if (!usedCodes.has(candidate)) {
+                    return candidate;
+                }
+            }
+            // If we failed after retries, it's likely high collision rate
+            // But for a 4-digit code, this only happens near the limit.
+            return null; 
+        }
+
+        // Handle Generate button click
+        function onGenerateClick() {
+            setLoadingState(true);
+
+            if (isMaxReached) {
+                setLoadingState(false);
+                return;
+            }
+
+            const newCode = generateUniqueCode();
+
+            if (newCode) {
+                usedCodes.add(newCode);
+                latestCode = newCode;
+                bigCode.textContent = newCode;
+                renderNewCode(newCode);
+                updateCountText();
+                showToast(`Code '${newCode}' generated!`, 'success');
+            } else {
+                // Should only happen if total limit is reached or massive collision (unlikely)
+                setMaxReachedState();
+                bigCode.textContent = "Error";
+                showToast("Failed to generate a unique code. Limit reached?", "error");
+            }
+            
+            setLoadingState(false);
+        }
+
+        /**
+         * Prepends the newly generated code to the top of the table.
+         * @param {string} code - The new code string.
+         */
+        function renderNewCode(code) {
+            const tr = document.createElement("tr");
+            tr.className = "bg-gray-800 hover:bg-gray-700 transition duration-100";
+            const td = document.createElement("td");
+            td.className = "py-2 px-4 whitespace-nowrap text-sm font-mono text-blue-300";
+            td.textContent = code;
+            tr.appendChild(td);
+
+            // Prepend the new row to the table body (Latest First)
+            if (codesBody.firstChild) {
+                codesBody.insertBefore(tr, codesBody.firstChild);
+            } else {
+                codesBody.appendChild(tr);
+            }
+        }
+
+
+        // Export codes as CSV with one column named "codes"
+        function exportCSV() {
+            if (usedCodes.size === 0) {
+                showToast("No codes to export.", "info");
+                return;
+            }
+            
+            const header = "Code\n";
+            // Convert Set to Array and join with newlines
+            const rows = Array.from(usedCodes).reverse().join("\n"); 
+            const csv = header + rows;
+            
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `discount_codes_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast("Export successful!", 'success');
+        }
+
+
+        // Initialize app: wire UI
+        function init() {
+            // Wire up UI event listeners
+            generateBtn.addEventListener("click", onGenerateClick);
+            copyBtn.addEventListener("click", copyToClipboard);
+            exportBtn.addEventListener("click", exportCSV);
+            
+            // Initial state update
+            updateCountText(); 
+            
+            console.log(`Client-Side Generator Initialized. Total possible unique codes: ${TOTAL_POSSIBLE_CODES.toLocaleString()}`);
+        }
+
+        init();
+    </script>
+</body>
+</html>
