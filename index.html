@@ -357,4 +357,12 @@
 
         function init() {
             generateBtn.addEventListener("click", onGenerateClick);
-            copyBtn.addEventListener("click
+            copyBtn.addEventListener("click", copyToClipboard);
+            exportBtn.addEventListener("click", exportCSV);
+            loadCodesFromFirestore();
+        }
+
+        init();
+    </script>
+</body>
+</html>
