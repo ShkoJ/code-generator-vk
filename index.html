@@ -13,7 +13,18 @@
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
                         mono: ['JetBrains Mono', 'monospace'],
-                    }
+                    },
+                    animation: {
+                        blob: "blob 7s infinite",
+                    },
+                    keyframes: {
+                        blob: {
+                            "0%": { transform: "translate(0px, 0px) scale(1)" },
+                            "33%": { transform: "translate(30px, -50px) scale(1.1)" },
+                            "66%": { transform: "translate(-20px, 20px) scale(0.9)" },
+                            "100%": { transform: "translate(0px, 0px) scale(1)" },
+                        },
+                    },
                 }
             }
         }
@@ -63,6 +74,12 @@
         /* Smooth Scroll for table */
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Gradient mask for history list fade out */
+        .mask-gradient {
+            mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col items-center justify-center p-6 selection:bg-black selection:text-white">
@@ -90,7 +107,7 @@
         </div>
 
         <div class="px-8 pb-10 space-y-4">
-            <button id="generateBtn" class="w-full h-14 bg-black hover:bg-slate-800 text-white font-medium rounded-2xl text-lg transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled>
+            <button id="generateBtn" class="w-full h-14 bg-black hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-medium rounded-2xl text-lg transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 disabled:shadow-none disabled:translate-y-0 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled>
                 Generate Code
             </button>
 
@@ -161,11 +178,13 @@
         const CODE_LENGTH = 4;
         const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         const TOTAL_POSSIBLE_CODES = Math.pow(CHARS.length, CODE_LENGTH);
+        const COOLDOWN_SECONDS = 5;
         
         const usedCodes = new Set();
         let latestCode = "—";
         let isMaxReached = false;
         let isInitialLoad = true;
+        let isCooldown = false;
 
         // --- FIREBASE OPS ---
 
@@ -255,6 +274,11 @@
                 generateBtn.disabled = true;
                 generateBtn.innerHTML = '<span class="spinner"></span>';
                 bigCode.style.opacity = "0.5";
+            } else if (isCooldown) {
+                // Cooldown state is handled by the timer function, 
+                // but this ensures we don't accidentally override it
+                generateBtn.disabled = true;
+                bigCode.style.opacity = "1";
             } else {
                 generateBtn.disabled = isMaxReached;
                 generateBtn.innerHTML = isMaxReached ? `Limit Reached` : `Generate New Code`;
@@ -263,10 +287,29 @@
             }
         }
 
+        function startCooldown() {
+            isCooldown = true;
+            let secondsLeft = COOLDOWN_SECONDS;
+            
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = `Wait ${secondsLeft}s`;
+            
+            const timer = setInterval(() => {
+                secondsLeft--;
+                if (secondsLeft <= 0) {
+                    clearInterval(timer);
+                    isCooldown = false;
+                    setLoadingState(false); // Reset to "Generate New Code"
+                } else {
+                    generateBtn.innerHTML = `Wait ${secondsLeft}s`;
+                }
+            }, 1000);
+        }
+
         function updateCountText() {
             countText.textContent = `${usedCodes.size} Generated`;
             if (usedCodes.size >= TOTAL_POSSIBLE_CODES) setMaxReachedState();
-            else if (!isInitialLoad) {
+            else if (!isInitialLoad && !isCooldown) {
                 isMaxReached = false;
                 generateBtn.disabled = false;
                 maxMessage.classList.add('hidden');
@@ -300,10 +343,12 @@
         }
 
         async function onGenerateClick() {
-            setLoadingState(true);
-            if (isMaxReached) { setLoadingState(false); return; }
+            // Guard clause if cooldown is active
+            if (isCooldown || isMaxReached) return;
 
-            // Artificial delay for UX feel (optional, remove if you want instant)
+            setLoadingState(true);
+
+            // Artificial delay for UX feel
             await new Promise(r => setTimeout(r, 400));
 
             const newCode = generateUniqueCode();
@@ -314,24 +359,22 @@
                 bigCode.textContent = newCode;
                 renderNewCode(newCode);
                 updateCountText();
-                await saveNewCodeToFirestore(newCode);
+                saveNewCodeToFirestore(newCode); // No await, let it save in background
+                
+                // Start Cooldown immediately after generation
+                startCooldown();
             } else {
                 setMaxReachedState();
                 bigCode.textContent = "FULL";
+                setLoadingState(false);
             }
-            
-            setLoadingState(false);
         }
 
         function renderNewCode(code) {
             const tr = document.createElement("tr");
             const td = document.createElement("td");
-            // Minimalist list item style
             td.className = "py-1.5 px-0 text-xs font-mono text-slate-500 border-b border-slate-100 flex justify-between";
-            
-            // Format timestamp nicely
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            
             td.innerHTML = `<span class="text-slate-800 font-bold">${code}</span> <span class="text-slate-300">${time}</span>`;
             tr.appendChild(td);
 
