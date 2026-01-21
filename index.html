@@ -3,98 +3,123 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>4-Digit Code Generator</title>
+    <title>Event Code Generator</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        /* Custom styles for spinner and toast */
+        /* Minimalist Spinner */
         .spinner {
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top: 2px solid #fff;
             width: 1em;
             height: 1em;
-            animation: spin 1s linear infinite;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #000;
+            border-radius: 50%;
             display: inline-block;
-            vertical-align: middle;
-            margin-right: 5px;
+            animation: spin 0.8s linear infinite;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* Elegant Toast */
         .toast-container {
             position: fixed;
-            top: 20px;
-            right: 20px;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
         }
         .toast {
-            @apply flex items-center p-3 mb-2 rounded-lg shadow-xl text-sm transform transition-all duration-300 ease-out translate-x-full opacity-0;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            backdrop-filter: blur(8px);
+            padding: 12px 24px;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        .toast.show {
-            @apply translate-x-0 opacity-100;
-        }
-        .toast.success { @apply bg-green-600 text-white; }
-        .toast.error { @apply bg-red-600 text-white; }
-        .toast.info { @apply bg-blue-600 text-white; }
-        .big-code-text {
-            /* Custom font styling for the code */
-            font-family: 'Inter', sans-serif;
-            letter-spacing: 0.25em;
-        }
+        .toast.show { opacity: 1; transform: translateY(0); }
         
+        /* Smooth Scroll for table */
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center p-4">
-    <main class="w-full max-w-2xl">
-        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl space-y-8">
-            <header class="text-center">
-                <h1 class="text-4xl font-extrabold text-blue-400">4-Digit Code Generator</h1>
-                <p class="text-gray-400 mt-2">Unique codes guaranteed (Now with Cloud Storage!)</p>
-            </header>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col items-center justify-center p-6 selection:bg-black selection:text-white">
 
-            <section class="generator-card bg-gray-700 p-6 rounded-xl space-y-6 text-center">
-                <div id="bigCode" class="big-code big-code-text text-7xl md:text-8xl font-black text-white p-4 bg-gray-900 rounded-lg shadow-inner">
-                    Loading...
-                </div>
+    <div class="fixed inset-0 z-[-1] opacity-60">
+        <div class="absolute top-0 -left-4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+        <div class="absolute top-0 -right-4 w-72 h-72 bg-yellow-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+        <div class="absolute -bottom-8 left-20 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+    </div>
 
-                <div class="controls flex flex-col sm:flex-row justify-center space-y-3 sm:space-y-0 sm:space-x-3">
-                    <button id="generateBtn" class="btn primary flex-grow sm:flex-none py-3 px-6 rounded-lg text-lg font-semibold bg-indigo-600 hover:bg-indigo-500 transition duration-150 shadow-md hover:shadow-lg disabled:bg-gray-500" disabled>
-                        <span id="generateIcon" class="icon">✨</span>
-                        Generate New Code
-                    </button>
-                    <button id="copyBtn" class="btn py-3 px-6 rounded-lg font-medium bg-gray-600 hover:bg-gray-500 transition duration-150 shadow-md">
-                        <span class="icon">📋</span>
-                        Copy
-                    </button>
-                    <button id="exportBtn" class="btn py-3 px-6 rounded-lg font-medium bg-gray-600 hover:bg-gray-500 transition duration-150 shadow-md">
-                        <span class="icon">⬇️</span>
-                        Export CSV
-                    </button>
-                </div>
+    <main class="w-full max-w-md bg-white/80 backdrop-blur-xl rounded-[2rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border border-white/50 overflow-hidden transition-all duration-500">
+        
+        <div class="pt-10 pb-2 text-center">
+            <h1 class="text-xs font-bold tracking-[0.2em] uppercase text-slate-400 mb-1">Pass Generator</h1>
+            <div class="flex items-center justify-center space-x-2">
+                <span id="countText" class="text-[10px] font-medium px-2 py-1 bg-slate-100 rounded-full text-slate-500">Connecting...</span>
+            </div>
+            <div id="maxMessage" class="hidden text-xs font-bold text-red-500 mt-2">Max Limit Reached</div>
+        </div>
 
-                <div class="status text-sm text-gray-400 space-x-2">
-                    <span id="countText">Connecting to database...</span>
-                    <span id="maxMessage" class="max-message text-yellow-400 font-bold" hidden>
-                        ⚠️ All possible codes generated!
-                    </span>
-                </div>
-            </section>
+        <div class="flex flex-col items-center justify-center py-8">
+            <div id="bigCode" class="text-7xl font-mono font-medium tracking-tighter text-slate-900 select-all cursor-pointer transition-transform hover:scale-105 active:scale-95 duration-200" title="Click to copy" onclick="document.getElementById('copyBtn').click()">
+                ....
+            </div>
+        </div>
 
-            <section class="table-section bg-gray-700 p-6 rounded-xl">
-                <h2 class="text-xl font-bold text-gray-200 mb-4">Generated Codes List (Latest First)</h2>
-                <div class="table-wrap max-h-64 overflow-y-auto rounded-lg">
-                    <table id="codesTable" class="min-w-full divide-y divide-gray-600">
-                        <thead class="bg-gray-600 sticky top-0">
-                            <tr><th class="py-3 px-4 text-left text-xs font-medium uppercase tracking-wider text-gray-200">CODE</th></tr>
-                        </thead>
-                        <tbody id="codesBody" class="bg-gray-700 divide-y divide-gray-600">
-                            </tbody>
-                    </table>
-                </div>
-            </section>
+        <div class="px-8 pb-10 space-y-4">
+            <button id="generateBtn" class="w-full h-14 bg-black hover:bg-slate-800 text-white font-medium rounded-2xl text-lg transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" disabled>
+                Generate Code
+            </button>
+
+            <div class="grid grid-cols-2 gap-3">
+                <button id="copyBtn" class="h-12 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    Copy
+                </button>
+                <button id="exportBtn" class="h-12 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    Export
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-slate-50 border-t border-slate-100 p-6">
+            <h2 class="text-[10px] font-bold tracking-widest uppercase text-slate-400 mb-3">Recent History</h2>
+            <div class="h-24 overflow-y-auto scrollbar-hide mask-gradient">
+                <table id="codesTable" class="w-full">
+                    <tbody id="codesBody" class="flex flex-col gap-1">
+                        </tbody>
+                </table>
+            </div>
         </div>
     </main>
+
+    <div class="mt-6 text-slate-400 text-xs font-medium">
+        Secure Event System
+    </div>
 
     <div id="toastContainer" class="toast-container"></div>
 
@@ -119,13 +144,12 @@
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const CODE_DOC_REF = doc(db, "uniqueCodes", "generatedCodes"); // Collection: uniqueCodes, Document: generatedCodes
+        const CODE_DOC_REF = doc(db, "uniqueCodes", "generatedCodes"); 
 
         // ====================================================================
-        // CLIENT-SIDE LOGIC FOR UNIQUE CODE GENERATION
+        // CLIENT-SIDE LOGIC
         // ====================================================================
 
-        // UI elements
         const generateBtn = document.getElementById("generateBtn");
         const copyBtn = document.getElementById("copyBtn");
         const exportBtn = document.getElementById("exportBtn");
@@ -134,60 +158,46 @@
         const countText = document.getElementById("countText");
         const maxMessage = document.getElementById("maxMessage");
 
-        // Constants
         const CODE_LENGTH = 4;
         const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        const TOTAL_POSSIBLE_CODES = Math.pow(CHARS.length, CODE_LENGTH); // 36^4 = 1,679,616
+        const TOTAL_POSSIBLE_CODES = Math.pow(CHARS.length, CODE_LENGTH);
         
-        // State
-        const usedCodes = new Set(); // Stores all generated codes for uniqueness check
+        const usedCodes = new Set();
         let latestCode = "—";
         let isMaxReached = false;
         let isInitialLoad = true;
 
-
-        /**
-         * ====================================================================
-         * FIREBASE DATA MANAGEMENT
-         * ====================================================================
-         */
+        // --- FIREBASE OPS ---
 
         async function loadCodesFromFirestore() {
             try {
-                showToast("Connecting to database...", 'info');
+                // Initial silent spinner
+                generateBtn.innerHTML = '<span class="spinner"></span>';
+                
                 const docSnap = await getDoc(CODE_DOC_REF);
 
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     const codesArray = data.codes || [];
                     
-                    codesArray.forEach(code => {
-                        usedCodes.add(code);
-                    });
-
-                    // Render codes from database
-                    // Since it's a Set, convert to array, reverse for "Latest First", and render
+                    codesArray.forEach(code => usedCodes.add(code));
                     Array.from(usedCodes).reverse().forEach(code => renderNewCode(code));
                     
                     if (usedCodes.size > 0) {
-                        latestCode = Array.from(usedCodes).pop(); // Last added to the Set
+                        latestCode = Array.from(usedCodes).pop();
                         bigCode.textContent = latestCode;
                     } else {
-                        bigCode.textContent = "—";
+                        bigCode.textContent = "READY";
                     }
-
-                    showToast(`Loaded ${usedCodes.size} codes from Firestore!`, 'success');
-
+                    showToast(`Synced ${usedCodes.size} codes`);
                 } else {
-                    // Document doesn't exist, create it with an empty array
                     await setDoc(CODE_DOC_REF, { codes: [] });
-                    bigCode.textContent = "—";
-                    showToast("Database document created.", 'info');
+                    bigCode.textContent = "READY";
                 }
             } catch (error) {
-                console.error("Error loading codes from Firestore:", error);
-                showToast("Failed to load codes from Firestore. Data will be temporary.", 'error');
-                bigCode.textContent = "Error";
+                console.error("Error", error);
+                showToast("Offline Mode / Error", 'error');
+                bigCode.textContent = "ERR";
             }
             
             isInitialLoad = false;
@@ -196,57 +206,36 @@
         }
 
         async function saveNewCodeToFirestore(newCode) {
-            // Firestore data structure: { codes: ["C1", "C2", ...] }
             try {
-                // Since we are adding one, we update the existing document by adding to the array.
-                // Firestore doesn't have a direct "add to Set" for arrays, so we overwrite the array
-                // to maintain atomicity and simplify the code. This is fine for small arrays.
                 await updateDoc(CODE_DOC_REF, {
                     codes: Array.from(usedCodes) 
                 });
-                console.log(`Code ${newCode} saved to Firestore.`);
             } catch (error) {
-                console.error("Error saving code to Firestore:", error);
-                showToast(`Code ${newCode} generated, but FAILED to save to cloud!`, 'error');
+                console.error("Error saving", error);
+                showToast(`Saved locally, but cloud sync failed`, 'error');
             }
         }
 
-
-        /**
-         * ====================================================================
-         * UX Utilities (Unchanged, for context)
-         * ====================================================================
-         */
+        // --- UI UTILS ---
 
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
             if (!container) return; 
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
-            
-            let icon = '';
-            if (type === 'success') icon = '✅';
-            if (type === 'error') icon = '❌';
-            if (type === 'info') icon = '💡';
-
-            toast.innerHTML = `<span class="toast-icon mr-2">${icon}</span><div class="toast-message">${message}</div>`;
+            toast.innerHTML = `<span>${message}</span>`;
             container.appendChild(toast);
-
             void toast.offsetWidth;
             toast.classList.add('show');
-
             setTimeout(() => {
                 toast.classList.remove('show');
                 toast.addEventListener('transitionend', () => toast.remove());
-            }, 4000);
+            }, 3000);
         }
 
         function copyToClipboard() {
             const code = latestCode.trim();
-            if (code === '—' || code === 'Generating...' || !code || isInitialLoad) {
-                showToast("No code to copy.", "info");
-                return;
-            }
+            if (code === '—' || code === 'READY' || !code || isInitialLoad) return;
             
             const tempInput = document.createElement('textarea');
             tempInput.value = code;
@@ -254,10 +243,9 @@
             tempInput.select();
             try {
                 document.execCommand('copy');
-                showToast(`'${code}' copied to clipboard!`, 'success');
+                showToast(`Copied`);
             } catch (err) {
-                console.error('Copy failed:', err);
-                showToast('Failed to copy. Please try again.', 'error');
+                showToast('Copy failed', 'error');
             }
             document.body.removeChild(tempInput);
         }
@@ -265,43 +253,34 @@
         function setLoadingState(isLoading) {
             if (isLoading || isInitialLoad) {
                 generateBtn.disabled = true;
-                generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
-                bigCode.textContent = 'Generating...';
+                generateBtn.innerHTML = '<span class="spinner"></span>';
+                bigCode.style.opacity = "0.5";
             } else {
                 generateBtn.disabled = isMaxReached;
-                generateBtn.innerHTML = isMaxReached 
-                    ? `<span class="icon">🛑</span> Max Reached`
-                    : `<span class="icon">✨</span> Generate New Code`;
-                if (bigCode.textContent === 'Generating...') {
-                    bigCode.textContent = latestCode;
-                }
+                generateBtn.innerHTML = isMaxReached ? `Limit Reached` : `Generate New Code`;
+                bigCode.style.opacity = "1";
+                if (bigCode.textContent === 'Generating...') bigCode.textContent = latestCode;
             }
         }
 
         function updateCountText() {
-            countText.textContent = `Codes generated: ${usedCodes.size} / ${TOTAL_POSSIBLE_CODES.toLocaleString()}`;
-            if (usedCodes.size >= TOTAL_POSSIBLE_CODES) {
-                setMaxReachedState();
-            } else if (!isInitialLoad) {
+            countText.textContent = `${usedCodes.size} Generated`;
+            if (usedCodes.size >= TOTAL_POSSIBLE_CODES) setMaxReachedState();
+            else if (!isInitialLoad) {
                 isMaxReached = false;
                 generateBtn.disabled = false;
-                maxMessage.hidden = true;
+                maxMessage.classList.add('hidden');
             }
         }
 
         function setMaxReachedState() {
             isMaxReached = true;
             generateBtn.disabled = true;
-            generateBtn.innerHTML = `<span class="icon">🛑</span> Max Reached`;
-            maxMessage.hidden = false;
-            showToast("Maximum number of unique codes reached for 4 digits!", "error");
+            generateBtn.innerHTML = `Limit Reached`;
+            maxMessage.classList.remove('hidden');
         }
 
-        /**
-         * ====================================================================
-         * Generation Logic
-         * ====================================================================
-         */
+        // --- LOGIC ---
 
         function randomCode() {
             let out = "";
@@ -312,27 +291,20 @@
         }
 
         function generateUniqueCode(retries = 10) {
-            if (usedCodes.size >= TOTAL_POSSIBLE_CODES) {
-                return null;
-            }
-
+            if (usedCodes.size >= TOTAL_POSSIBLE_CODES) return null;
             for (let i = 0; i < retries; i++) {
                 const candidate = randomCode();
-                if (!usedCodes.has(candidate)) {
-                    return candidate;
-                }
+                if (!usedCodes.has(candidate)) return candidate;
             }
             return null; 
         }
 
-        // Handle Generate button click - NOW ASYNC
         async function onGenerateClick() {
             setLoadingState(true);
+            if (isMaxReached) { setLoadingState(false); return; }
 
-            if (isMaxReached) {
-                setLoadingState(false);
-                return;
-            }
+            // Artificial delay for UX feel (optional, remove if you want instant)
+            await new Promise(r => setTimeout(r, 400));
 
             const newCode = generateUniqueCode();
 
@@ -342,15 +314,10 @@
                 bigCode.textContent = newCode;
                 renderNewCode(newCode);
                 updateCountText();
-                
-                // *** FIREBASE STEP: Save the new code ***
                 await saveNewCodeToFirestore(newCode);
-                
-                showToast(`Code '${newCode}' generated & saved!`, 'success');
             } else {
                 setMaxReachedState();
-                bigCode.textContent = "Error";
-                showToast("Failed to generate a unique code. Limit reached?", "error");
+                bigCode.textContent = "FULL";
             }
             
             setLoadingState(false);
@@ -358,10 +325,14 @@
 
         function renderNewCode(code) {
             const tr = document.createElement("tr");
-            tr.className = "bg-gray-800 hover:bg-gray-700 transition duration-100";
             const td = document.createElement("td");
-            td.className = "py-2 px-4 whitespace-nowrap text-sm font-mono text-blue-300";
-            td.textContent = code;
+            // Minimalist list item style
+            td.className = "py-1.5 px-0 text-xs font-mono text-slate-500 border-b border-slate-100 flex justify-between";
+            
+            // Format timestamp nicely
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            td.innerHTML = `<span class="text-slate-800 font-bold">${code}</span> <span class="text-slate-300">${time}</span>`;
             tr.appendChild(td);
 
             if (codesBody.firstChild) {
@@ -372,40 +343,18 @@
         }
 
         function exportCSV() {
-            if (usedCodes.size === 0) {
-                showToast("No codes to export.", "info");
-                return;
-            }
-            
+            if (usedCodes.size === 0) { showToast("Nothing to export"); return; }
             const header = "Code\n";
             const rows = Array.from(usedCodes).reverse().join("\n"); 
-            const csv = header + rows;
-            
-            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = `discount_codes_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.download = `codes_${new Date().toISOString().slice(0, 10)}.csv`;
             a.click();
             URL.revokeObjectURL(url);
-            showToast("Export successful!", 'success');
         }
 
-
-        // Initialize app: wire UI
         function init() {
-            // Wire up UI event listeners
             generateBtn.addEventListener("click", onGenerateClick);
-            copyBtn.addEventListener("click", copyToClipboard);
-            exportBtn.addEventListener("click", exportCSV);
-            
-            // Load data and set initial state
-            loadCodesFromFirestore();
-            
-            console.log(`Client-Side Generator Initialized. Total possible unique codes: ${TOTAL_POSSIBLE_CODES.toLocaleString()}`);
-        }
-
-        init();
-    </script>
-</body>
-</html>
+            copyBtn.addEventListener("click
